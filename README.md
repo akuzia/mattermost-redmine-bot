@@ -1,8 +1,8 @@
-# Redmine bot for Slack
+# Redmine bot for Mattermost
 
-Redmine issue name expander for Slack. 
+Redmine issue name expander for Mattermost.
 
-Bot parses the issue numbers (`#54321`), the links to issue (`http://redmine.host.com/issues/54321`) and displays the issue name with attributes: 
+Bot parses the issue numbers (`#54321`), the links to issue (`http://redmine.host.com/issues/54321`) and displays the issue name with attributes:
 * project
 * tracker
 * author
@@ -10,27 +10,17 @@ Bot parses the issue numbers (`#54321`), the links to issue (`http://redmine.hos
 * category
 * version
 
-![Example](/static/screenshot.png?raw=true)
-
 ## Run
 
 ### From sources
 
+Create .env file from .env.dist, then:
 ```
-git clone https://github.com/muxx/slack-redmine-bot
-cd slack-redmine-bot
-cp config.yml.example config.yml
-make build
-make run
+make build run
 ```
 
-The binary will be installed at `./bin/slack-redmine-bot`.
+The binary will be installed at `./bin/mattermost-redmine-bot`.
 
-### From docker
+### As a container
 
-Create `config.yml` from example `config.yml.example`.
-
-```
-docker pull muxx/slack-redmine-bot
-docker run --rm -it -v /path/to/config.yml:/config.yml muxx/slack-redmine-bot:latest
-```
+Use available [Docker image](https://hub.docker.com/r/akuzia/mattermost-redmine-bot)

@@ -1,0 +1,55 @@
+name: Main Pipeline
+
+on:
+  push:
+    branches:
+      - '*'
+    tags:
+      - '*'
+
+jobs:
+  # TODO: run tests
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v2
+
+      - name: set up go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.20'
+
+      - name: check go mod
+        run: go mod verify
+
+      - name: build binary
+        run: make build_only
+
+      - name: set env vars
+        run: |
+          echo VERSION_TAG=$(echo ${GITHUB_REPOSITORY}:${GITHUB_REF_NAME} | tr '[:upper:]' '[:lower:]') >> $GITHUB_ENV
+          echo LATEST_TAG=$(echo ${GITHUB_REPOSITORY}:latest | tr '[:upper:]' '[:lower:]') >> $GITHUB_ENV
+          echo MASTER_SHA=$(git rev-parse origin/master) >> $GITHUB_ENV
+
+      - name: print image tags
+        run: |
+          echo ${{ env.VERSION_TAG }}
+          echo ${{ env.LATEST_TAG }}
+          echo ${{ env.MASTER_SHA }}
+
+      - name: login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_LOGIN }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: build docker image
+        run: docker build -t ${{ env.VERSION_TAG }} -t ${{ env.LATEST_TAG }} .
+
+      - name: push version
+        run: docker push ${{ env.VERSION_TAG }}
+
+      - name: push latest
+        run: docker push ${{ env.LATEST_TAG }}
+        if: ${{ github.sha == env.MASTER_SHA }}

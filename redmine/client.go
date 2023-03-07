@@ -2,9 +2,8 @@ package redmine
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 )
@@ -104,11 +103,11 @@ func (r *Client) GetIssue(number string) (*Issue, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return &issue, errors.New(fmt.Sprintf("Error getting issue. Status code: %d.\n", resp.StatusCode))
+		return &issue, fmt.Errorf("error getting issue. Status code: %d", resp.StatusCode)
 	}
 
 	defer resp.Body.Close()
-	data, err := ioutil.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return &issue, err
 	}

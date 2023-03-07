@@ -1,6 +1,5 @@
 ROOT_DIR=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-CONFIG_FILE=$(ROOT_DIR)/config.yml
-BIN=$(ROOT_DIR)/bin/slack-redmine-bot
+BIN=$(ROOT_DIR)/bin/mattermost-redmine-bot
 REVISION=$(shell git describe --tags 2>/dev/null || git log --format="v0.0-%h" -n 1 || echo "v0.0-unknown")
 
 run:
