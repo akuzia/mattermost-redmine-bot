@@ -1,22 +1,12 @@
-# build binary
-
-FROM golang:alpine AS builder
-
-RUN apk --update --no-cache add --virtual build-dependencies \
-    git make \
-    && git clone https://github.com/muxx/slack-redmine-bot /root/repo \
-    && make build -C /root/repo \
-    && cp /root/repo/bin/slack-redmine-bot / \
-    && rm -rf /root/repo \
-    && apk update && apk del build-dependencies
-
-# build image
+FROM gcr.io/distroless/base as distroless
 
 FROM scratch
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=builder /slack-redmine-bot /slack-redmine-bot
+COPY --from=distroless /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+ADD ./etcpasswd /etc/passwd
+ADD ./bin/mattermost-redmine-bot /var/app/
 
-WORKDIR /
+WORKDIR /var/app
+USER nobody
 
-ENTRYPOINT ["/slack-redmine-bot", "--config", "/config.yml"]
+CMD ["/var/app/mattermost-redmine-bot"]

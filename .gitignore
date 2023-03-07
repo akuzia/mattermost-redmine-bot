@@ -25,6 +25,6 @@ _testmain.go
 
 .idea
 
+.env
 /bin
-/config.yml
 /vendor

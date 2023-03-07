@@ -1,41 +1,29 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"log"
+	"net/url"
+	"os"
+	"strings"
+
+	"github.com/akuzia/mattermost-redmine-bot/mattermost"
+	"github.com/akuzia/mattermost-redmine-bot/redmine"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
-	"os"
-	"slack-redmine-bot/redmine"
-	"slack-redmine-bot/slack"
 )
 
 func configInit() {
-	viper.SetEnvPrefix("srb")
+	viper.AutomaticEnv()
 
-	var configPath string
-
-	flag.StringVar(&configPath, "config", "", "Path of configuration file without name (name must be config.yml)")
-	flag.Parse()
-
-	if len(configPath) > 0 {
-		viper.AddConfigPath(configPath)
+	if _, err := os.Stat(".env"); err == nil {
+		viper.SetConfigFile(".env")
 	}
 
-	configPath = os.Getenv("SRB_CONFIG")
-	if len(configPath) > 0 {
-		viper.AddConfigPath(configPath)
-	}
-
-	viper.AddConfigPath("/etc/slack-redmine-bot/")
-	viper.AddConfigPath(".")
-
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-
-	err := viper.ReadInConfig()
-	if err != nil {
-		panic(fmt.Errorf("Error in config file. %s \n", err))
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			log.Fatal(fmt.Errorf("error in config file: %w", err))
+		}
 	}
 }
 
@@ -45,12 +33,22 @@ func init() {
 
 func main() {
 	redmine := redmine.New(
-		viper.GetString("redmine.url"),
-		viper.GetString("redmine.api_key"),
-		cast.ToIntSlice(viper.Get("redmine.closed_statuses")),
-		cast.ToIntSlice(viper.Get("redmine.high_priorities")),
+		viper.GetString("redmine_url"),
+		viper.GetString("redmine_api_key"),
+		cast.ToIntSlice(strings.Split(viper.GetString("redmine_closed_statuses"), ",")),
+		cast.ToIntSlice(strings.Split(viper.GetString("redmine_high_priorities"), ",")),
 	)
-	slack := slack.New(redmine, viper.GetString("slack.token"))
 
-	slack.Listen()
+	baseUrl, err := url.Parse(viper.GetString("mattermost_url"))
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	mm := mattermost.New(
+		baseUrl,
+		viper.GetString("mattermost_token"),
+		redmine,
+	)
+
+	mm.Listen()
 }
