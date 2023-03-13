@@ -4,11 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net/url"
-	"os"
-	"os/signal"
 	"regexp"
 	"strings"
-	"syscall"
 
 	"github.com/akuzia/mattermost-redmine-bot/redmine"
 	"github.com/mattermost/mattermost-server/v5/model"
@@ -26,6 +23,7 @@ type Client struct {
 	websocketClient *model.WebSocketClient
 	redmine         *redmine.Client
 	pattern         *regexp.Regexp
+	user            model.User
 }
 
 func New(
@@ -35,6 +33,8 @@ func New(
 ) *Client {
 	client := model.NewAPIv4Client(baseUrl.String())
 	client.SetToken(token)
+
+	user, _ := client.GetMe("")
 
 	wsUrl := *baseUrl
 	wsUrl.Scheme = "ws"
@@ -52,6 +52,7 @@ func New(
 		webSocketClient,
 		redmineClient,
 		regexp.MustCompile(fmt.Sprintf(issuePattern, regexp.QuoteMeta(redmineClient.Url))),
+		*user,
 	}
 }
 
@@ -134,7 +135,6 @@ func (s *Client) processEvent(event *model.WebSocketEvent) {
 }
 
 func (s *Client) Listen() {
-	s.watchSignals()
 	s.websocketClient.Listen()
 
 	log.Println("listener started")
@@ -148,15 +148,17 @@ func (s *Client) Listen() {
 	log.Println("listener stopped")
 }
 
-func (s *Client) watchSignals() {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGINT)
-	signal.Notify(c, syscall.SIGTERM)
-	go func() {
-		for range c {
-			if s.websocketClient != nil {
-				s.websocketClient.Close()
-			}
+func (s *Client) Close() {
+	s.websocketClient.Close()
+}
+
+func (s *Client) JoinChannels() {
+	log.Println("joining available channels")
+	teams, _ := s.client.GetTeamsForUser(s.user.Id, "")
+	for _, t := range teams {
+		channels, _ := s.client.GetPublicChannelsForTeam(t.Id, 0, 100, "")
+		for _, c := range channels {
+			s.client.AddChannelMember(c.Id, s.user.Id)
 		}
-	}()
+	}
 }
