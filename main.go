@@ -5,7 +5,10 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/akuzia/mattermost-redmine-bot/mattermost"
 	"github.com/akuzia/mattermost-redmine-bot/redmine"
@@ -39,6 +42,8 @@ func main() {
 		cast.ToIntSlice(strings.Split(viper.GetString("redmine_high_priorities"), ",")),
 	)
 
+	viper.SetDefault("mattermost_channel_join_minutes", 15)
+
 	baseUrl, err := url.Parse(viper.GetString("mattermost_url"))
 	if err != nil {
 		log.Fatal(err.Error())
@@ -50,5 +55,29 @@ func main() {
 		redmine,
 	)
 
+	watchSignals(mm)
+
 	mm.Listen()
+}
+
+func watchSignals(mm *mattermost.Client) {
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT)
+	signal.Notify(signalChan, syscall.SIGTERM)
+
+	duration := viper.GetInt64("mattermost_channel_join_minutes")
+	ticker := time.NewTicker(time.Duration(duration) * time.Minute)
+
+	go func() {
+	out:
+		for {
+			select {
+			case <-signalChan:
+				mm.Close()
+				break out
+			case <-ticker.C:
+				mm.JoinChannels()
+			}
+		}
+	}()
 }
