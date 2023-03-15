@@ -109,7 +109,15 @@ func (s *Client) processEvent(event *model.WebSocketEvent) {
 		return
 	}
 
+	if post.UserId == s.user.Id {
+		return
+	}
+
 	matches := s.pattern.FindAllStringSubmatch(post.Message, -1)
+	for _, attach := range post.Attachments() {
+		matches = append(matches, s.pattern.FindAllStringSubmatch(attach.Text, -1)...)
+		matches = append(matches, s.pattern.FindAllStringSubmatch(attach.Pretext, -1)...)
+	}
 
 	for _, v := range matches {
 		issueNumber := v[2]
