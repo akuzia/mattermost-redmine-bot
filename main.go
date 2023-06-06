@@ -10,10 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/akuzia/mattermost-redmine-bot/logger"
 	"github.com/akuzia/mattermost-redmine-bot/mattermost"
 	"github.com/akuzia/mattermost-redmine-bot/redmine"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 func configInit() {
@@ -35,6 +37,11 @@ func init() {
 }
 
 func main() {
+	logger, err := logger.New(viper.GetViper())
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	redmine := redmine.New(
 		viper.GetString("redmine_url"),
 		viper.GetString("redmine_api_key"),
@@ -46,21 +53,34 @@ func main() {
 
 	baseUrl, err := url.Parse(viper.GetString("mattermost_url"))
 	if err != nil {
-		log.Fatal(err.Error())
+		logger.Fatal(
+			"cannot get mattermost url",
+			zap.String("url", viper.GetString("mattermost_url")),
+		)
 	}
 
-	mm := mattermost.New(
+	mm, err := mattermost.New(
 		baseUrl,
 		viper.GetString("mattermost_token"),
 		redmine,
+		logger,
 	)
+	if err != nil {
+		logger.Fatal(
+			"cannot create mattermos client",
+			zap.Error(err),
+		)
+	}
 
-	watchSignals(mm)
+	watchSignals(mm, logger)
 
 	mm.Listen()
 }
 
-func watchSignals(mm *mattermost.Client) {
+func watchSignals(
+	mm *mattermost.Client,
+	logger *zap.Logger,
+) {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT)
 	signal.Notify(signalChan, syscall.SIGTERM)
@@ -72,7 +92,11 @@ func watchSignals(mm *mattermost.Client) {
 	out:
 		for {
 			select {
-			case <-signalChan:
+			case s := <-signalChan:
+				logger.Info(
+					"recieved signal",
+					zap.String("signal", s.String()),
+				)
 				mm.Close()
 				break out
 			case <-ticker.C:
