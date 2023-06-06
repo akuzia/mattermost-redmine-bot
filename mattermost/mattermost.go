@@ -2,13 +2,13 @@ package mattermost
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"regexp"
 	"strings"
 
 	"github.com/akuzia/mattermost-redmine-bot/redmine"
 	"github.com/mattermost/mattermost-server/v5/model"
+	"go.uber.org/zap"
 )
 
 const (
@@ -24,13 +24,15 @@ type Client struct {
 	redmine         *redmine.Client
 	pattern         *regexp.Regexp
 	user            model.User
+	logger          *zap.Logger
 }
 
 func New(
 	baseUrl *url.URL,
 	token string,
 	redmineClient *redmine.Client,
-) *Client {
+	logger *zap.Logger,
+) (*Client, error) {
 	client := model.NewAPIv4Client(baseUrl.String())
 	client.SetToken(token)
 
@@ -42,7 +44,7 @@ func New(
 
 	webSocketClient, err := model.NewWebSocketClient4(wsUrl.String(), token)
 	if err != nil {
-		log.Fatal(err.Error())
+		return nil, err
 	}
 
 	return &Client{
@@ -53,7 +55,8 @@ func New(
 		redmineClient,
 		regexp.MustCompile(fmt.Sprintf(issuePattern, regexp.QuoteMeta(redmineClient.Url))),
 		*user,
-	}
+		logger,
+	}, nil
 }
 
 func (s *Client) sendMessage(issue *redmine.Issue, channel string, rootId string) (err error) {
@@ -104,7 +107,10 @@ func (s *Client) processEvent(event *model.WebSocketEvent) {
 
 	post := model.PostFromJson(strings.NewReader(event.GetData()["post"].(string)))
 	if post == nil {
-		log.Printf("cannot decode post: %v", event.GetData())
+		s.logger.Info(
+			"cannot decode post",
+			zap.Any("body", event.GetData()),
+		)
 
 		return
 	}
@@ -137,7 +143,7 @@ func (s *Client) processEvent(event *model.WebSocketEvent) {
 func (s *Client) Listen() {
 	s.websocketClient.Listen()
 
-	log.Println("listener started")
+	s.logger.Info("listener started")
 	for event := range s.websocketClient.EventChannel {
 		if event.EventType() != model.WEBSOCKET_EVENT_POSTED {
 			continue
@@ -145,15 +151,21 @@ func (s *Client) Listen() {
 
 		s.processEvent(event)
 	}
-	log.Println("listener stopped")
+	s.logger.Info("listener stopped")
+	if s.websocketClient.ListenError != nil {
+		s.logger.Error(
+			"mattermost listener socket error",
+			zap.Error(s.websocketClient.ListenError),
+		)
+	}
 }
 
 func (s *Client) Close() {
+	s.logger.Info("closing mattermost client")
 	s.websocketClient.Close()
 }
 
 func (s *Client) JoinChannels() {
-	log.Println("joining available channels")
 	teams, _ := s.client.GetTeamsForUser(s.user.Id, "")
 	for _, t := range teams {
 		channels, _ := s.client.GetPublicChannelsForTeam(t.Id, 0, 100, "")
