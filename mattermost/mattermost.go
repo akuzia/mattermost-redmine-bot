@@ -25,6 +25,7 @@ type Client struct {
 	pattern         *regexp.Regexp
 	user            model.User
 	logger          *zap.Logger
+	closed          bool
 }
 
 func New(
@@ -56,6 +57,7 @@ func New(
 		regexp.MustCompile(fmt.Sprintf(issuePattern, regexp.QuoteMeta(redmineClient.Url))),
 		*user,
 		logger,
+		false,
 	}, nil
 }
 
@@ -141,27 +143,30 @@ func (s *Client) processEvent(event *model.WebSocketEvent) {
 }
 
 func (s *Client) Listen() {
-	s.websocketClient.Listen()
+	for !s.closed {
+		s.logger.Info("starting mattermost websocket")
+		s.websocketClient.Listen()
 
-	s.logger.Info("listener started")
-	for event := range s.websocketClient.EventChannel {
-		if event.EventType() != model.WEBSOCKET_EVENT_POSTED {
-			continue
+		for event := range s.websocketClient.EventChannel {
+			if event.EventType() != model.WEBSOCKET_EVENT_POSTED {
+				continue
+			}
+
+			s.processEvent(event)
 		}
-
-		s.processEvent(event)
+		if s.websocketClient.ListenError != nil {
+			s.logger.Error(
+				"mattermost listener socket error",
+				zap.Error(s.websocketClient.ListenError),
+			)
+		}
 	}
-	s.logger.Info("listener stopped")
-	if s.websocketClient.ListenError != nil {
-		s.logger.Error(
-			"mattermost listener socket error",
-			zap.Error(s.websocketClient.ListenError),
-		)
-	}
+	s.logger.Info("mattermost websocket closed")
 }
 
 func (s *Client) Close() {
 	s.logger.Info("closing mattermost client")
+	s.closed = true
 	s.websocketClient.Close()
 }
 
