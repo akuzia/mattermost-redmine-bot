@@ -1,13 +1,14 @@
 package mattermost
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
 
 	"github.com/akuzia/mattermost-redmine-bot/redmine"
-	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/mattermost/mattermost-server/v6/model"
 	"go.uber.org/zap"
 )
 
@@ -37,7 +38,7 @@ func New(
 	client := model.NewAPIv4Client(baseUrl.String())
 	client.SetToken(token)
 
-	user, _ := client.GetMe("")
+	user, _, _ := client.GetMe("")
 
 	wsUrl := *baseUrl
 	wsUrl.Scheme = "ws"
@@ -107,8 +108,9 @@ func (s *Client) sendMessage(issue *redmine.Issue, channel string, rootId string
 func (s *Client) processEvent(event *model.WebSocketEvent) {
 	processed := make(map[string]bool)
 
-	post := model.PostFromJson(strings.NewReader(event.GetData()["post"].(string)))
-	if post == nil {
+	post := &model.Post{}
+	err := json.Unmarshal([]byte(event.GetData()["post"].(string)), &post)
+	if err != nil {
 		s.logger.Info(
 			"cannot decode post",
 			zap.Any("body", event.GetData()),
@@ -148,7 +150,7 @@ func (s *Client) Listen() {
 		s.websocketClient.Listen()
 
 		for event := range s.websocketClient.EventChannel {
-			if event.EventType() != model.WEBSOCKET_EVENT_POSTED {
+			if event.EventType() != model.WebsocketEventPosted {
 				continue
 			}
 
@@ -171,9 +173,9 @@ func (s *Client) Close() {
 }
 
 func (s *Client) JoinChannels() {
-	teams, _ := s.client.GetTeamsForUser(s.user.Id, "")
+	teams, _, _ := s.client.GetTeamsForUser(s.user.Id, "")
 	for _, t := range teams {
-		channels, _ := s.client.GetPublicChannelsForTeam(t.Id, 0, 100, "")
+		channels, _, _ := s.client.GetPublicChannelsForTeam(t.Id, 0, 100, "")
 		for _, c := range channels {
 			s.client.AddChannelMember(c.Id, s.user.Id)
 		}
