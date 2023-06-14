@@ -146,22 +146,34 @@ func (s *Client) processEvent(event *model.WebSocketEvent) {
 
 func (s *Client) Listen() {
 	for !s.closed {
-		s.logger.Info("starting mattermost websocket")
-		s.websocketClient.Listen()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					s.logger.Error(
+						"mattermost listener panicked",
+						zap.Any("error", r),
+					)
+				}
+			}()
 
-		for event := range s.websocketClient.EventChannel {
-			if event.EventType() != model.WebsocketEventPosted {
-				continue
+			s.logger.Info("starting mattermost websocket")
+			s.websocketClient.Listen()
+
+			for event := range s.websocketClient.EventChannel {
+				if event.EventType() != model.WebsocketEventPosted {
+					continue
+				}
+
+				s.processEvent(event)
 			}
 
-			s.processEvent(event)
-		}
-		if s.websocketClient.ListenError != nil {
-			s.logger.Error(
-				"mattermost listener socket error",
-				zap.Error(s.websocketClient.ListenError),
-			)
-		}
+			if s.websocketClient.ListenError != nil {
+				s.logger.Error(
+					"mattermost listener socket error",
+					zap.Error(s.websocketClient.ListenError),
+				)
+			}
+		}()
 	}
 	s.logger.Info("mattermost websocket closed")
 }
