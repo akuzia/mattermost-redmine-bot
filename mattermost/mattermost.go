@@ -18,15 +18,15 @@ const (
 )
 
 type Client struct {
-	url             *url.URL
-	token           string
-	client          *model.Client4
-	websocketClient *model.WebSocketClient
-	redmine         *redmine.Client
-	pattern         *regexp.Regexp
-	user            model.User
-	logger          *zap.Logger
-	closed          bool
+	url       *url.URL
+	token     string
+	client    *model.Client4
+	redmine   *redmine.Client
+	pattern   *regexp.Regexp
+	user      *model.User
+	logger    *zap.Logger
+	closed    bool
+	closeChan chan struct{}
 }
 
 func New(
@@ -38,28 +38,28 @@ func New(
 	client := model.NewAPIv4Client(baseUrl.String())
 	client.SetToken(token)
 
-	user, _, _ := client.GetMe("")
-
-	wsUrl := *baseUrl
-	wsUrl.Scheme = "ws"
-	wsUrl.Host = strings.Join([]string{wsUrl.Hostname(), "8065"}, ":")
-
-	webSocketClient, err := model.NewWebSocketClient4(wsUrl.String(), token)
-	if err != nil {
-		return nil, err
-	}
-
 	return &Client{
 		baseUrl,
 		token,
 		client,
-		webSocketClient,
 		redmineClient,
 		regexp.MustCompile(fmt.Sprintf(issuePattern, regexp.QuoteMeta(redmineClient.Url))),
-		*user,
+		nil,
 		logger,
 		false,
+		make(chan struct{}),
 	}, nil
+}
+
+func (s *Client) NewWebSocketClient() (*model.WebSocketClient, error) {
+	user, _, _ := s.client.GetMe("")
+	s.user = user
+
+	wsUrl := *s.url
+	wsUrl.Scheme = "ws"
+	wsUrl.Host = strings.Join([]string{wsUrl.Hostname(), "8065"}, ":")
+
+	return model.NewWebSocketClient4(wsUrl.String(), s.token)
 }
 
 func (s *Client) sendMessage(issue *redmine.Issue, channel string, rootId string) (err error) {
@@ -157,20 +157,40 @@ func (s *Client) Listen() {
 			}()
 
 			s.logger.Info("starting mattermost websocket")
-			s.websocketClient.Listen()
+			ws, err := s.NewWebSocketClient()
+			if err != nil {
+				s.logger.Fatal(
+					"unable to init websocket client",
+					zap.Error(err),
+				)
 
-			for event := range s.websocketClient.EventChannel {
-				if event.EventType() != model.WebsocketEventPosted {
-					continue
+				s.closed = true
+
+				return
+			}
+			ws.Listen()
+
+		inner:
+			for {
+				select {
+				case event := <-ws.EventChannel:
+					if event.EventType() != model.WebsocketEventPosted {
+						continue
+					}
+
+					s.processEvent(event)
+
+				case <-s.closeChan:
+					s.closed = true
+
+					break inner
 				}
-
-				s.processEvent(event)
 			}
 
-			if s.websocketClient.ListenError != nil {
+			if ws.ListenError != nil {
 				s.logger.Error(
 					"mattermost listener socket error",
-					zap.Error(s.websocketClient.ListenError),
+					zap.Error(ws.ListenError),
 				)
 			}
 		}()
@@ -180,8 +200,7 @@ func (s *Client) Listen() {
 
 func (s *Client) Close() {
 	s.logger.Info("closing mattermost client")
-	s.closed = true
-	s.websocketClient.Close()
+	s.closeChan <- struct{}{}
 }
 
 func (s *Client) JoinChannels() {
