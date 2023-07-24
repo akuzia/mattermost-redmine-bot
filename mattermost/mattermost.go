@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"runtime/debug"
 	"strings"
 
 	"github.com/akuzia/mattermost-redmine-bot/redmine"
@@ -152,6 +153,7 @@ func (s *Client) Listen() {
 					s.logger.Error(
 						"mattermost listener panicked",
 						zap.Any("error", r),
+						zap.String("trace", string(debug.Stack())),
 					)
 				}
 			}()
