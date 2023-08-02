@@ -57,8 +57,8 @@ func (s *Client) NewWebSocketClient() (*model.WebSocketClient, error) {
 	s.user = user
 
 	wsUrl := *s.url
-	wsUrl.Scheme = "ws"
-	wsUrl.Host = strings.Join([]string{wsUrl.Hostname(), "8065"}, ":")
+	wsUrl.Scheme = "wss"
+	wsUrl.Host = s.url.Hostname()
 
 	return model.NewWebSocketClient4(wsUrl.String(), s.token)
 }
