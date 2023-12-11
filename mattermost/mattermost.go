@@ -206,9 +206,29 @@ func (s *Client) Close() {
 }
 
 func (s *Client) JoinChannels() {
-	teams, _, _ := s.client.GetTeamsForUser(s.user.Id, "")
+	teams, _, err := s.client.GetTeamsForUser(s.user.Id, "")
+	if err != nil {
+		s.logger.Error(
+			"cannot get teams",
+			zap.Error(err),
+		)
+
+		return
+	}
+
 	for _, t := range teams {
-		channels, _, _ := s.client.GetPublicChannelsForTeam(t.Id, 0, 100, "")
+		channels, _, err := s.client.GetPublicChannelsForTeam(t.Id, 0, 100, "")
+		if err != nil {
+			s.logger.Error(
+				"cannot get channels",
+				zap.String("team_name", t.Name),
+				zap.String("team_id", t.Id),
+				zap.Error(err),
+			)
+
+			continue
+		}
+
 		for _, c := range channels {
 			s.client.AddChannelMember(c.Id, s.user.Id)
 		}
