@@ -50,6 +50,7 @@ func main() {
 	)
 
 	viper.SetDefault("mattermost_channel_join_minutes", 15)
+	viper.SetDefault("mattermost_socket_lifetime_minutes", 360)
 
 	baseUrl, err := url.Parse(viper.GetString("mattermost_url"))
 	if err != nil {
@@ -85,22 +86,28 @@ func watchSignals(
 	signal.Notify(signalChan, syscall.SIGINT)
 	signal.Notify(signalChan, syscall.SIGTERM)
 
-	duration := viper.GetInt64("mattermost_channel_join_minutes")
-	ticker := time.NewTicker(time.Duration(duration) * time.Minute)
+	joinTicker := time.NewTicker(time.Duration(viper.GetInt64("mattermost_channel_join_minutes")) * time.Minute)
+	reconnectTicker := time.NewTicker(time.Duration(viper.GetInt64("mattermost_socket_lifetime_minutes")) * time.Minute)
 
 	go func() {
 	out:
 		for {
 			select {
 			case s := <-signalChan:
+				joinTicker.Stop()
+				reconnectTicker.Stop()
+
 				logger.Info(
 					"recieved signal",
 					zap.String("signal", s.String()),
 				)
 				mm.Close()
 				break out
-			case <-ticker.C:
+			case <-joinTicker.C:
 				mm.JoinChannels()
+			case <-reconnectTicker.C:
+				mm.Close()
+				mm.Listen()
 			}
 		}
 	}()

@@ -112,9 +112,10 @@ func (s *Client) processEvent(event *model.WebSocketEvent) {
 	post := &model.Post{}
 	err := json.Unmarshal([]byte(event.GetData()["post"].(string)), &post)
 	if err != nil {
-		s.logger.Info(
+		s.logger.Error(
 			"cannot decode post",
 			zap.Any("body", event.GetData()),
+			zap.Error(err),
 		)
 
 		return
@@ -158,7 +159,7 @@ func (s *Client) Listen() {
 				}
 			}()
 
-			s.logger.Info("starting mattermost websocket")
+			s.logger.Debug("starting mattermost websocket")
 			ws, err := s.NewWebSocketClient()
 			if err != nil {
 				s.logger.Fatal(
@@ -197,11 +198,11 @@ func (s *Client) Listen() {
 			}
 		}()
 	}
-	s.logger.Info("mattermost websocket closed")
+	s.logger.Debug("mattermost websocket closed")
 }
 
 func (s *Client) Close() {
-	s.logger.Info("closing mattermost client")
+	s.logger.Debug("closing mattermost client")
 	s.closeChan <- struct{}{}
 }
 
